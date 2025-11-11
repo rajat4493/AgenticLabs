@@ -1,0 +1,13 @@
+
+  ui:
+
+    build:
+
+      context: .
+
+      dockerfile: infra/Dockerfile.ui
+
+    ports:
+
+      - "3000:3000"
+
