@@ -22,18 +22,16 @@ services:
   ui:
     build:
       context: ../ui
-      dockerfile: Dockerfile.ui
-    container_name: agenticlabs_ui
+      dockerfile: Dockerfile
     ports:
       - "3000:3000"
-    environment:
-      NEXT_PUBLIC_API_BASE_URL: "http://localhost:8000"
     depends_on:
-      api:
-        condition: service_started
+      -api
+      -postgres
+    # For hot reload, keep code mounted and preserve node_modules in container
     volumes:
       - ../ui:/app
-      - /app/node_modules   # keep deps inside container when bind-mounting
+      - /app/node_modules
 
   postgres:
     image: postgres:15

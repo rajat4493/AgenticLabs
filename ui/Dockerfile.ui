@@ -1,23 +1,20 @@
-# ---- base image ----
-FROM node:20-alpine
-
-# set working directory inside the container
+# ui/Dockerfile
+FROM node:20-alpine AS builder
 WORKDIR /app
-
-# copy dependency manifests first (better caching)
-COPY package*.json pnpm-lock.yaml* yarn.lock* ./
-
-# install dependencies depending on which lockfile exists
-RUN if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; \
-    elif [ -f pnpm-lock.yaml ]; then npm i -g pnpm && pnpm i --frozen-lockfile; \
-    elif [ -f yarn.lock ]; then yarn install --frozen-lockfile; \
-    else npm i --no-audit --no-fund; fi
-
-# copy the rest of the source code
+RUN apk add --no-cache libc6-compat
+COPY package*.json ./
+RUN npm ci
 COPY . .
+RUN npm run build
 
-# expose the dev port
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app/package*.json ./
+RUN npm ci --omit=dev
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/next.config.js ./next.config.js
+COPY --from=builder /app/app ./app
 EXPOSE 3000
-
-# run the dev server (swap to build + start for prod)
-CMD ["npm", "run", "dev"]
+CMD ["npm","start"]
