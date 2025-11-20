@@ -1,1 +1,5 @@
-requests>=2.32.0
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+requests
