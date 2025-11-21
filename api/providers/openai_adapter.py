@@ -2,31 +2,9 @@ import os
 import time
 from typing import Any, Dict
 
-from openai import OpenAI
+import requests
 
-_client: OpenAI | None = None
-
-
-def _get_client() -> OpenAI:
-    global _client
-    if _client is None:
-        _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    return _client
-
-
-OPENAI_PRICING_PER_1M = {
-    "gpt-4o": {"input": 2.50, "output": 10.00},
-    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-}
-
-
-def _estimate_cost_usd(model: str, prompt_tokens: int, completion_tokens: int) -> float:
-    pricing = OPENAI_PRICING_PER_1M.get(model)
-    if not pricing:
-        return 0.0
-    cost_input = (prompt_tokens / 1_000_000) * pricing["input"]
-    cost_output = (completion_tokens / 1_000_000) * pricing["output"]
-    return round(cost_input + cost_output, 8)
+from pricing import estimate_cost
 
 
 def plan(run_payload: Dict[str, Any], model_name: str = "gpt-4o-mini") -> Dict[str, Any]:
@@ -51,8 +29,6 @@ def plan(run_payload: Dict[str, Any], model_name: str = "gpt-4o-mini") -> Dict[s
 
 
 def execute(plan: Dict[str, Any], prompt: str) -> Dict[str, Any]:
-    client = _get_client()
-
     target = plan.get("target") or {}
     params = plan.get("params") or {}
 
@@ -60,10 +36,13 @@ def execute(plan: Dict[str, Any], prompt: str) -> Dict[str, Any]:
     temperature = params.get("temperature", 0.2)
     max_tokens = params.get("max_tokens", 512)
 
-    t0 = time.perf_counter()
-    resp = client.chat.completions.create(
-        model=model,
-        messages=[
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is not configured")
+
+    payload = {
+        "model": model,
+        "messages": [
             {
                 "role": "system",
                 "content": "You are a helpful, concise assistant used inside AgenticLabs smart router.",
@@ -73,19 +52,35 @@ def execute(plan: Dict[str, Any], prompt: str) -> Dict[str, Any]:
                 "content": prompt,
             },
         ],
-        temperature=temperature,
-        max_tokens=max_tokens,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    t0 = time.perf_counter()
+    resp = requests.post(
+        os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1") + "/chat/completions",
+        json=payload,
+        headers=headers,
+        timeout=60,
     )
     latency_ms = int((time.perf_counter() - t0) * 1000)
+    resp.raise_for_status()
+    data = resp.json()
 
-    choice = resp.choices[0]
-    output_text = choice.message.content or ""
+    choice = (data.get("choices") or [{}])[0]
+    message = choice.get("message") or {}
+    output_text = message.get("content", "")
 
-    usage = getattr(resp, "usage", None)
-    prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
-    completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
+    usage = data.get("usage") or {}
+    prompt_tokens = int(usage.get("prompt_tokens", 0))
+    completion_tokens = int(usage.get("completion_tokens", 0))
 
-    cost_usd = _estimate_cost_usd(model, prompt_tokens, completion_tokens)
+    cost_usd = estimate_cost(model, prompt_tokens, completion_tokens)
 
     provenance = {
         "provider": "openai",
@@ -101,4 +96,6 @@ def execute(plan: Dict[str, Any], prompt: str) -> Dict[str, Any]:
         "cost_usd": cost_usd,
         "confidence": 0.9,
         "provenance": provenance,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
     }

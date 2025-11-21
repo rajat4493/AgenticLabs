@@ -17,6 +17,8 @@ from router.complexity import score_complexity, choose_band
 from analytics.store import metrics_store
 from logger import log_event
 from providers import PROVIDERS
+from pricing import calc_baseline_cost
+from routes import logs
 
 
 def _env(name: str, default: str) -> str:
@@ -52,6 +54,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(logs.router)
 
 @app.get("/v1/metrics/summary")
 def metrics_summary():
@@ -130,7 +134,32 @@ def run_endpoint(payload: RunRequest):
     alri_tag = compute_alri_tag(ctx.get("risk_band"), ctx.get("jurisdiction"))
 
     # ---- Metrics ----
-    metrics_store.record(result["latency_ms"], result["cost_usd"])
+    prompt_tokens = result.get("prompt_tokens")
+    if prompt_tokens is None:
+        prompt_tokens = (result.get("provenance") or {}).get("input_tokens", 0)
+    completion_tokens = result.get("completion_tokens")
+    if completion_tokens is None:
+        completion_tokens = (result.get("provenance") or {}).get("output_tokens", 0)
+
+    if prompt_tokens or completion_tokens:
+        baseline_cost = calc_baseline_cost(
+            int(prompt_tokens or 0),
+            int(completion_tokens or 0),
+            baseline_model="gpt-4o",
+        )
+    else:
+        baseline_cost = result["cost_usd"]
+
+    metrics_store.add_run(
+        band=cband,
+        provider=provider_name,
+        model=model_name,
+        latency_ms=result["latency_ms"],
+        prompt_tokens=int(prompt_tokens or 0),
+        completion_tokens=int(completion_tokens or 0),
+        cost_usd=result["cost_usd"],
+        baseline_cost_usd=baseline_cost,
+    )
 
     # ---- Response ----
     resp = RunResponse(

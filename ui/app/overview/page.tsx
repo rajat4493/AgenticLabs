@@ -3,17 +3,30 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_AGENTICLABS_API ?? "http://localhost:8000";
+type ProviderStat = {
+  provider: string;
+  runs: number;
+  total_cost_usd: number;
+  avg_latency_ms: number;
+};
 
 type MetricsSummary = {
   total_runs: number;
   avg_latency_ms: number;
   total_cost_usd: number;
+  cost_per_run_usd: number;
+  baseline_cost_usd: number | null;
+  savings_vs_baseline_usd: number | null;
+  savings_pct: number | null;
+  provider_breakdown: ProviderStat[];
+  timeseries: { date: string; requests: number; cost_usd: number }[];
 };
 
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+
 export default function OverviewPage() {
-  const [metrics, setMetrics] = useState<MetricsSummary | null>(null);
+  const [summary, setSummary] = useState<MetricsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +45,7 @@ export default function OverviewPage() {
         }
 
         const data = (await res.json()) as MetricsSummary;
-        setMetrics(data);
+        setSummary(data);
       } catch (err: any) {
         console.error("Failed to load metrics:", err);
         setError(err?.message ?? "Unknown error");
@@ -44,19 +57,28 @@ export default function OverviewPage() {
     loadMetrics();
   }, []);
 
-  const totalRuns = metrics?.total_runs ?? 0;
-  const avgLatency = metrics?.avg_latency_ms ?? 0;
-  const totalCost = metrics?.total_cost_usd ?? 0;
-  const costPerRun = totalRuns > 0 ? totalCost / totalRuns : 0;
+  const totalRuns = summary?.total_runs ?? 0;
+  const avgLatency = summary?.avg_latency_ms ?? 0;
+  const totalCost = summary?.total_cost_usd ?? 0;
+  const costPerRun =
+    summary?.cost_per_run_usd ??
+    (totalRuns > 0 ? totalCost / Math.max(1, totalRuns) : 0);
+  const baselineCost = summary?.baseline_cost_usd ?? null;
+  const savingsUsd = summary?.savings_vs_baseline_usd ?? null;
+  const savingsPct = summary?.savings_pct ?? null;
+  const savingsDisplay =
+    savingsUsd != null && savingsPct != null
+      ? `$${savingsUsd.toFixed(6)} (${savingsPct.toFixed(1)}%)`
+      : "—";
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50">
+    <div className="min-h-screen bg-[#030712] text-slate-50">
       {/* subtle gradient wash */}
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,_rgba(45,212,191,0.24),_transparent_55%),radial-gradient(circle_at_bottom,_rgba(56,189,248,0.16),_transparent_55%)] opacity-70" />
-      <main className="relative mx-auto flex max-w-6xl flex-col gap-8 px-4 pb-16 pt-10 sm:px-6 lg:px-8">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,_rgba(45,212,191,0.22),_transparent_55%),radial-gradient(circle_at_bottom,_rgba(56,189,248,0.16),_transparent_55%),linear-gradient(130deg,_rgba(12,18,40,0.9)_0%,_rgba(2,8,23,0.95)_60%)]" />
+      <main className="relative mx-auto flex max-w-6xl flex-col gap-9 px-4 pb-16 pt-10 sm:px-6 lg:px-8">
         {/* Hero */}
         <section className="space-y-6">
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 bg-slate-950/80 px-3 py-1 text-[11px] font-medium text-emerald-200 shadow-[0_0_0_1px_rgba(15,23,42,0.8)] backdrop-blur">
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/40 bg-black/30 px-3 py-1 text-[11px] font-medium text-emerald-200 shadow-[0_4px_18px_rgba(16,185,129,0.35)] backdrop-blur">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/60" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
@@ -80,6 +102,19 @@ export default function OverviewPage() {
                 costing you. Designed as the starting point for your cost &
                 governance story.
               </p>
+              {savingsUsd != null && savingsPct != null && baselineCost != null && (
+                <p className="text-sm text-emerald-200/80">
+                  You saved{" "}
+                  <span className="font-semibold text-emerald-100">
+                    ${savingsUsd.toFixed(6)}
+                  </span>{" "}
+                  ({savingsPct.toFixed(1)}%) vs a baseline of{" "}
+                  <span className="font-semibold text-emerald-100">
+                    ${baselineCost.toFixed(6)}
+                  </span>
+                  .
+                </p>
+              )}
             </div>
 
             <div className="space-y-1 text-right text-[11px] text-slate-400">
@@ -94,13 +129,13 @@ export default function OverviewPage() {
 
         {/* States */}
         {loading && (
-          <div className="rounded-2xl border border-slate-800/80 bg-slate-950/80 px-4 py-3 text-sm text-slate-200 backdrop-blur">
+          <div className="rounded-2xl border border-slate-800/70 bg-black/30 px-4 py-3 text-sm text-slate-200 shadow-[0_12px_24px_rgba(2,6,23,0.6)] backdrop-blur">
             Loading metrics…
           </div>
         )}
 
         {!loading && error && (
-          <Card className="border-red-500/50 bg-red-950/70 backdrop-blur">
+          <Card className="border-red-500/60 bg-gradient-to-br from-red-900/70 to-red-950/80 shadow-[0_18px_40px_rgba(239,68,68,0.35)] backdrop-blur">
             <CardHeader>
               <CardTitle className="text-sm text-red-100">
                 Error loading metrics
@@ -120,7 +155,7 @@ export default function OverviewPage() {
         {!loading && !error && (
           <section className="grid gap-5 lg:grid-cols-[1.8fr,1.2fr]">
             {/* Primary metric panel */}
-            <Card className="border-slate-800/80 bg-slate-950/80 shadow-[0_18px_45px_rgba(15,23,42,0.9)] backdrop-blur">
+            <Card className="border border-slate-800/70 bg-gradient-to-br from-[#0d1529]/90 via-[#070d1c]/95 to-[#020409] shadow-[0_35px_90px_rgba(1,4,14,0.85)] backdrop-blur-xl">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center justify-between text-xs font-medium uppercase tracking-wide text-slate-300/90">
                   Traffic & cost
@@ -174,9 +209,9 @@ export default function OverviewPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-3">
                   {/* Cost per run */}
-                  <div className="rounded-xl border border-slate-800/70 bg-slate-950/80 px-4 py-3">
+                  <div className="rounded-xl border border-slate-800/70 bg-gradient-to-r from-slate-900/80 to-slate-950/80 px-4 py-3 shadow-[0_20px_40px_rgba(3,7,18,0.65)]">
                     <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
                       Cost per run
                     </p>
@@ -190,7 +225,7 @@ export default function OverviewPage() {
                   </div>
 
                   {/* Tiny “trend” stub */}
-                  <div className="rounded-xl border border-slate-800/70 bg-slate-950/80 px-4 py-3">
+                  <div className="rounded-xl border border-slate-800/70 bg-gradient-to-r from-[#071129]/85 to-[#040917]/90 px-4 py-3 shadow-[0_15px_35px_rgba(2,6,23,0.65)]">
                     <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
                       Router signal
                     </p>
@@ -203,12 +238,25 @@ export default function OverviewPage() {
                       <div className="h-full w-2/3 bg-gradient-to-r from-emerald-400 via-cyan-400 to-sky-400" />
                     </div>
                   </div>
+
+                  {/* Savings */}
+                  <div className="rounded-xl border border-slate-800/70 bg-gradient-to-r from-[#041020]/85 to-[#02070f]/90 px-4 py-3 shadow-[0_15px_30px_rgba(1,6,20,0.6)]">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                      Savings vs baseline (all gpt-4o)
+                    </p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-300">
+                      {savingsDisplay}
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Compared to routing 100% of traffic through gpt-4o.
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
             {/* Right-hand “explainer” / product copy */}
-            <Card className="border-slate-800/70 bg-slate-950/75 backdrop-blur">
+            <Card className="border border-slate-800/60 bg-gradient-to-br from-[#0b0f1d]/90 via-[#090d17]/85 to-[#04060c] shadow-[0_25px_70px_rgba(1,4,12,0.85)] backdrop-blur-lg">
               <CardHeader className="pb-1">
                 <CardTitle className="text-sm font-medium text-slate-100">
                   How to use this view
@@ -247,12 +295,58 @@ export default function OverviewPage() {
         )}
 
         {/* Empty state */}
-        {!loading && !error && metrics && metrics.total_runs === 0 && (
+        {!loading && !error && summary && summary.total_runs === 0 && (
           <p className="text-[11px] text-slate-500">
             No runs recorded yet. Trigger a call to{" "}
             <span className="font-mono text-slate-200">/v1/run</span> from the
             API docs, then refresh this page.
           </p>
+        )}
+
+        {summary && (
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold tracking-wide text-slate-200">
+              Provider breakdown
+            </h2>
+            {summary.provider_breakdown.length === 0 ? (
+              <p className="text-xs text-slate-500">
+                No routed runs recorded yet. Send some traffic through the router
+                and refresh this page.
+              </p>
+            ) : (
+              <div className="overflow-hidden rounded-2xl border border-slate-800/80 bg-gradient-to-br from-slate-900/70 to-slate-950/80 shadow-[0_25px_60px_rgba(1,3,10,0.75)]">
+                <table className="min-w-full text-xs">
+                  <thead className="bg-slate-900/70">
+                    <tr className="text-left text-slate-400">
+                      <th className="px-4 py-3 font-medium">Provider</th>
+                      <th className="px-4 py-3 font-medium">Runs</th>
+                      <th className="px-4 py-3 font-medium">Total cost</th>
+                      <th className="px-4 py-3 font-medium">Avg latency</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summary.provider_breakdown.map((p) => (
+                      <tr
+                        key={p.provider}
+                        className="border-t border-slate-800/70 text-slate-100"
+                      >
+                        <td className="px-4 py-3 capitalize">{p.provider}</td>
+                        <td className="px-4 py-3">
+                          {p.runs.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3">
+                          ${p.total_cost_usd.toFixed(6)}
+                        </td>
+                        <td className="px-4 py-3">
+                          {p.avg_latency_ms.toFixed(1)} ms
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
         )}
       </main>
     </div>

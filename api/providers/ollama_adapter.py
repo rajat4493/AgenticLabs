@@ -54,6 +54,8 @@ def execute(plan: Dict[str, Any], prompt: str) -> Dict[str, Any]:
         "confidence": 0.9,
         "latency_ms": latency_ms,
         "cost_usd": 0.0,
+        "prompt_tokens": tokens_in,
+        "completion_tokens": tokens_out,
         "provenance": {
             "provider": "ollama",
             "model": model,

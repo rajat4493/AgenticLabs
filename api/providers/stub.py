@@ -34,6 +34,8 @@ def execute(plan: Dict[str, Any], prompt: str) -> Dict[str, Any]:
         "confidence": 0.95,  # fixed high confidence for stub
         "latency_ms": latency_ms,
         "cost_usd": round(cost, 6),
+        "prompt_tokens": tokens_in,
+        "completion_tokens": tokens_out,
         "provenance": {
             "provider": "stub",
             "model": "stub-echo-1",
