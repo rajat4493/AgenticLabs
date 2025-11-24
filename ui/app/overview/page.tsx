@@ -268,8 +268,9 @@ export default function OverviewPage() {
                       {avgAlriScore != null ? avgAlriScore.toFixed(1) : "—"}
                     </p>
                     <p className="mt-1 text-[11px] text-slate-500">
-                      Agentic load &amp; risk index based on cost, complexity,
-                      governance, and overrides.
+                      ALRI (0–10) summarizes cost, complexity, business impact,
+                      safety, and governance pressure for your AI traffic.
+                      Higher = heavier, more sensitive workload.
                     </p>
                   </div>
 
@@ -281,7 +282,8 @@ export default function OverviewPage() {
                       {highAlriDisplay}
                     </p>
                     <p className="mt-1 text-[11px] text-slate-500">
-                      % of traffic that lands in high/critical retention tiers.
+                      Share of requests that fall into long-retention /
+                      audit-grade tiers (orange or red).
                     </p>
                   </div>
                 </div>
