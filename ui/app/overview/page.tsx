@@ -20,6 +20,8 @@ type MetricsSummary = {
   savings_pct: number | null;
   provider_breakdown: ProviderStat[];
   timeseries: { date: string; requests: number; cost_usd: number }[];
+  avg_alri_score: number | null;
+  high_alri_run_pct: number | null;
 };
 
 const API_BASE =
@@ -70,6 +72,10 @@ export default function OverviewPage() {
     savingsUsd != null && savingsPct != null
       ? `$${savingsUsd.toFixed(6)} (${savingsPct.toFixed(1)}%)`
       : "—";
+  const avgAlriScore = summary?.avg_alri_score ?? null;
+  const highAlriRunPct = summary?.high_alri_run_pct ?? null;
+  const highAlriDisplay =
+    highAlriRunPct != null ? `${highAlriRunPct.toFixed(1)}%` : "—";
 
   return (
     <div className="min-h-screen bg-[#030712] text-slate-50">
@@ -249,6 +255,33 @@ export default function OverviewPage() {
                     </p>
                     <p className="mt-1 text-[11px] text-slate-500">
                       Compared to routing 100% of traffic through gpt-4o.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-xl border border-slate-800/70 bg-gradient-to-r from-[#030b1b]/85 to-[#01050b]/90 px-4 py-3 shadow-[0_15px_35px_rgba(1,6,18,0.55)]">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                      Avg ALRI (0–10)
+                    </p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-50">
+                      {avgAlriScore != null ? avgAlriScore.toFixed(1) : "—"}
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Agentic load &amp; risk index based on cost, complexity,
+                      governance, and overrides.
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-800/70 bg-gradient-to-r from-[#050d21]/85 to-[#020610]/90 px-4 py-3 shadow-[0_15px_35px_rgba(1,5,16,0.55)]">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                      High ALRI runs
+                    </p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums text-amber-300">
+                      {highAlriDisplay}
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      % of traffic that lands in high/critical retention tiers.
                     </p>
                   </div>
                 </div>

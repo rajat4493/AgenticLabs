@@ -14,4 +14,4 @@ async def list_logs(
     db: Session = Depends(get_db),
 ):
     """Return most recent runs, newest first."""
-    return list_runs(db, tenant_id=1, offset=offset, limit=limit)
+    return list_runs(db, offset=offset, limit=limit)

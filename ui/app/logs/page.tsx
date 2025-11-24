@@ -9,11 +9,16 @@ type RunRecord = {
   provider: string;
   model: string;
   latency_ms: number;
+  router_latency_ms?: number | null;
+  provider_latency_ms?: number | null;
+  processing_latency_ms?: number | null;
   prompt_tokens: number;
   completion_tokens: number;
   cost_usd: number;
   baseline_cost_usd: number;
   savings_usd: number;
+  alri_score?: number | null;
+  alri_tier?: string | null;
 };
 
 type LogsResponse = {
@@ -65,6 +70,13 @@ export default function LogsPage() {
     new Date(ts * 1000).toLocaleString(undefined, {
       hour12: false,
     });
+
+  const formatAlri = (score?: number | null, tier?: string | null) => {
+    if (score == null) return "—";
+    const scoreText = score % 1 === 0 ? score.toFixed(0) : score.toFixed(1);
+    const tierLabel = tier ? tier.replace(/_/g, " ") : "";
+    return tierLabel ? `${scoreText} (${tierLabel})` : scoreText;
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50">
@@ -135,13 +147,16 @@ export default function LogsPage() {
                     <th className="px-4 py-2 text-right font-medium">
                       Saved vs gpt-4o
                     </th>
+                    <th className="px-4 py-2 text-right font-medium">
+                      ALRI
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={8}
+                        colSpan={9}
                         className="px-4 py-6 text-center text-slate-500"
                       >
                         No runs recorded yet.
@@ -162,7 +177,16 @@ export default function LogsPage() {
                           {r.model}
                         </td>
                         <td className="px-4 py-2 text-right">
-                          {r.latency_ms.toFixed(1)} ms
+                          {(r.latency_ms / 1000).toFixed(3)} s
+                          {r.router_latency_ms != null &&
+                            r.provider_latency_ms != null &&
+                            r.processing_latency_ms != null && (
+                              <div className="mt-1 text-[11px] text-slate-400">
+                                Router {(r.router_latency_ms / 1000).toFixed(3)} s · Provider{" "}
+                                {(r.provider_latency_ms / 1000).toFixed(3)} s · Processing{" "}
+                                {(r.processing_latency_ms / 1000).toFixed(3)} s
+                              </div>
+                            )}
                         </td>
                         <td className="px-4 py-2 text-right">
                           {r.prompt_tokens + r.completion_tokens}
@@ -179,6 +203,9 @@ export default function LogsPage() {
                         >
                           {r.savings_usd >= 0 ? "+" : ""}
                           {r.savings_usd.toFixed(6)}
+                        </td>
+                        <td className="px-4 py-2 text-right text-slate-200">
+                          {formatAlri(r.alri_score, r.alri_tier)}
                         </td>
                       </tr>
                     ))

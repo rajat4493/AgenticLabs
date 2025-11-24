@@ -1,4 +1,5 @@
 import os
+import time
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -17,6 +18,7 @@ from router.complexity import choose_band, score_complexity
 from logger import log_event
 from providers import PROVIDERS
 from pricing import calc_baseline_cost
+from governance.alri import compute_alri_v2
 from routes import logs
 from db.models import Base
 from db.router_runs_repo import get_summary, list_runs as list_runs_repo, log_run
@@ -79,6 +81,7 @@ def health():
 @app.post("/v1/run", response_model=RunResponse)
 def run_endpoint(payload: RunRequest, db: Session = Depends(get_db)):
     rid = new_run_id()
+    t_start = time.perf_counter()
     log_event("router_in", {"run_id": rid, "agent_id": payload.agent_id})
 
     # ---- Smart routing (with manual override) ----
@@ -118,8 +121,11 @@ def run_endpoint(payload: RunRequest, db: Session = Depends(get_db)):
     # ---- Plan + Execute ----
     plan = provider_impl.plan(payload.model_dump(), model_name=model_name)
     log_event("route_plan", {"run_id": rid, "plan": plan})
+    t_router_done = time.perf_counter()
 
+    t_provider_start = time.perf_counter()
     result = provider_impl.execute(plan, payload.prompt)
+    t_provider_end = time.perf_counter()
     log_event("provider_out", {
         "run_id": rid,
         "latency_ms": result["latency_ms"],
@@ -153,17 +159,48 @@ def run_endpoint(payload: RunRequest, db: Session = Depends(get_db)):
     else:
         baseline_cost = result["cost_usd"]
 
+    overrides_obj = payload.policy_overrides or {}
+    overrides_used = bool(
+        overrides_obj.get("force_provider")
+        or overrides_obj.get("force_model")
+        or overrides_obj.get("force_band")
+    )
+
+    alri_score, alri_tier = compute_alri_v2(
+        band=cband,
+        provider=provider_name,
+        model=model_name,
+        prompt_tokens=int(prompt_tokens or 0),
+        completion_tokens=int(completion_tokens or 0),
+        cost_usd=result["cost_usd"],
+        baseline_cost_usd=baseline_cost,
+        overrides_used=overrides_used,
+    )
+
+    t_done = time.perf_counter()
+    total_latency_ms = (t_done - t_start) * 1000.0
+    router_latency_ms = (t_router_done - t_start) * 1000.0
+    provider_latency_ms = (t_provider_end - t_provider_start) * 1000.0
+    processing_latency_ms = max(
+        0.0, total_latency_ms - router_latency_ms - provider_latency_ms
+    )
+
     log_run(
         db,
 
         band=cband,
         provider=provider_name,
         model=model_name,
-        latency_ms=result["latency_ms"],
+        latency_ms=total_latency_ms,
+        router_latency_ms=router_latency_ms,
+        provider_latency_ms=provider_latency_ms,
+        processing_latency_ms=processing_latency_ms,
         prompt_tokens=int(prompt_tokens or 0),
         completion_tokens=int(completion_tokens or 0),
         cost_usd=result["cost_usd"],
         baseline_cost_usd=baseline_cost,
+        alri_score=alri_score,
+        alri_tier=alri_tier,
     )
 
     # ---- Response ----
@@ -174,7 +211,7 @@ def run_endpoint(payload: RunRequest, db: Session = Depends(get_db)):
         confidence=result["confidence"],
         provenance=Provenance(**result["provenance"]),
         policy_evaluation=PolicyEvaluation(**pol),
-        metrics=MetricsInfo(latency_ms=result["latency_ms"], cost_usd=result["cost_usd"]),
+        metrics=MetricsInfo(latency_ms=int(total_latency_ms), cost_usd=result["cost_usd"]),
         audit=AuditInfo(retention_class=alri_tag, audit_hash=None)
     )
 
