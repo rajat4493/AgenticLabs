@@ -18,43 +18,49 @@ const PROVIDER_THEMES: Record<ProviderKey, ProviderTheme> = {
     label: "Auto (Router decides)",
     layout: "classic-chat",
     accentClass: "border-indigo-400",
-    backgroundClass: "bg-slate-950",
+    backgroundClass:
+      "bg-[radial-gradient(circle_at_top,_rgba(79,70,229,0.2),_transparent_52%),radial-gradient(circle_at_bottom,_rgba(15,118,110,0.18),_transparent_55%),#020617]",
     chipClass: "bg-slate-800 text-slate-200",
   },
   openai: {
-    label: "OpenAI-ish",
+    label: "GPT (OpenAI)",
     layout: "split-right",
-    accentClass: "border-emerald-400",
-    backgroundClass: "bg-slate-950",
-    chipClass: "bg-emerald-900/40 text-emerald-200",
+    accentClass: "border-[#74AA9C]",
+    backgroundClass:
+      "bg-gradient-to-br from-[#0c1f1a] via-[#082820] to-[#031410]",
+    chipClass: "bg-[#1d3f34] text-[#9fd6c7]",
   },
   anthropic: {
-    label: "Claude-ish",
+    label: "Claude (Anthropic)",
     layout: "stacked",
-    accentClass: "border-amber-400",
-    backgroundClass: "bg-slate-950",
-    chipClass: "bg-amber-900/40 text-amber-200",
+    accentClass: "border-amber-300",
+    backgroundClass:
+      "bg-gradient-to-br from-[#3d1d05] via-[#4e2a0d] to-[#1d1006]",
+    chipClass: "bg-[#5c3411] text-[#ffd7a3]",
   },
   grok: {
-    label: "Grok-ish",
+    label: "Grok",
     layout: "console",
-    accentClass: "border-fuchsia-400",
-    backgroundClass: "bg-slate-950",
-    chipClass: "bg-fuchsia-900/40 text-fuchsia-200",
+    accentClass: "border-white/70",
+    backgroundClass:
+    "bg-gradient-to-br from-black via-[#0f0f0f] to-black",
+    chipClass: "bg-white/10 text-white",
   },
   gemini: {
-    label: "Gemini-ish",
+    label: "Gemini",
     layout: "split-right",
     accentClass: "border-sky-400",
-    backgroundClass: "bg-slate-950",
-    chipClass: "bg-sky-900/40 text-sky-200",
+    backgroundClass:
+      "bg-[radial-gradient(circle_at_top_left,_rgba(239,68,68,0.25),_transparent_35%),radial-gradient(circle_at_top_right,_rgba(59,130,246,0.3),_transparent_40%),radial-gradient(circle_at_bottom_left,_rgba(250,204,21,0.25),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(34,197,94,0.3),_transparent_40%),#03050f]",
+    chipClass: "bg-[#113472] text-sky-200",
   },
   ollama: {
-    label: "Local (Ollama)",
+    label: "Ollama (Local)",
     layout: "classic-chat",
-    accentClass: "border-zinc-500",
-    backgroundClass: "bg-slate-950",
-    chipClass: "bg-zinc-800 text-zinc-200",
+    accentClass: "border-blue-300",
+    backgroundClass:
+      "bg-gradient-to-br from-[#07142a] via-[#0b223f] to-[#02060d]",
+    chipClass: "bg-[#0f356b] text-blue-100",
   },
 };
 
@@ -476,4 +482,3 @@ function ConsoleLayout(props: LayoutProps) {
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
-
