@@ -14,6 +14,8 @@ class OverviewSummary(BaseModel):
     baseline_total_cost_usd: Optional[float] = None
     savings_vs_baseline_usd: Optional[float] = None
     savings_vs_baseline_pct: Optional[float] = None
+    what_if_cost_usd: Optional[float] = None
+    what_if_vs_actual_usd: Optional[float] = None
 
 
 class ProviderBreakdownItem(BaseModel):

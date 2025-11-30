@@ -35,3 +35,4 @@ class RouterRun(Base):
     query_category = Column(String(50), nullable=True)
     query_category_conf = Column(Float, nullable=True)
     routing_efficient = Column(Boolean, nullable=True)
+    counterfactual_cost_usd = Column(Float, nullable=True)

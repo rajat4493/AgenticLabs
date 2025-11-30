@@ -21,6 +21,7 @@ type RunRecord = {
   alri_score?: number | null;
   alri_tier?: string | null;
   query_category?: string | null;
+  counterfactual_cost_usd?: number | null;
 };
 
 type LogsResponse = {
@@ -165,6 +166,7 @@ export default function LogsPage() {
       "alri_score",
       "alri_tier",
       "query_category",
+      "counterfactual_cost_usd",
     ];
     const rows = sortedItems.map((row) => [
       row.id,
@@ -184,6 +186,7 @@ export default function LogsPage() {
       row.alri_score ?? "",
       row.alri_tier ?? "",
       row.query_category ?? "",
+      row.counterfactual_cost_usd ?? "",
     ]);
     const csv = [headers, ...rows]
       .map((cols) =>
@@ -343,6 +346,9 @@ export default function LogsPage() {
                       </div>
                     </th>
                     <th className="px-4 py-2 text-right font-medium">
+                      What-if GPT-4.1
+                    </th>
+                    <th className="px-4 py-2 text-right font-medium">
                       <div className="flex items-center justify-end gap-1">
                         Saved vs gpt-4o
                         <SortIcon column="savings" />
@@ -405,6 +411,11 @@ export default function LogsPage() {
                         </td>
                         <td className="px-4 py-2 text-right">
                           ${r.cost_usd.toFixed(6)}
+                        </td>
+                        <td className="px-4 py-2 text-right text-slate-300">
+                          {r.counterfactual_cost_usd != null
+                            ? `$${r.counterfactual_cost_usd.toFixed(6)}`
+                            : "—"}
                         </td>
                         <td
                           className={`px-4 py-2 text-right ${

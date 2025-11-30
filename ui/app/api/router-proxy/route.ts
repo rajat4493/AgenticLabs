@@ -22,8 +22,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const bandInput = typeof body?.band === "string" ? body.band : "medium";
-    const mappedBand = BAND_MAP[bandInput] ?? "moderate";
+    const bandInput = typeof body?.band === "string" ? body.band : undefined;
+    const mappedBand = bandInput ? BAND_MAP[bandInput] : undefined;
     const forceProvider =
       typeof body?.force_provider === "string" &&
       body.force_provider !== "auto"
@@ -79,7 +79,7 @@ export async function POST(req: Request) {
       output: data?.output ?? "",
       provider,
       model,
-      band: mappedBand,
+      band: mappedBand ?? "auto",
       latency_ms: data?.metrics?.latency_ms,
       cost: {
         total_usd: data?.metrics?.cost_usd,

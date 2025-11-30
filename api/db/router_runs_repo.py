@@ -3,6 +3,7 @@ from typing import Any, Dict, List
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
+from analytics.aggregate_overview import aggregate_overview_costs
 from .models import RouterRun
 
 
@@ -26,6 +27,7 @@ def log_run(
     query_category: str | None = None,
     query_category_conf: float | None = None,
     routing_efficient: bool | None = None,
+    counterfactual_cost_usd: float | None = None,
 ) -> RouterRun:
     savings_usd = baseline_cost_usd - cost_usd
     run = RouterRun(
@@ -47,6 +49,7 @@ def log_run(
         query_category=query_category,
         query_category_conf=query_category_conf,
         routing_efficient=routing_efficient,
+        counterfactual_cost_usd=counterfactual_cost_usd,
     )
     db.add(run)
     db.commit()
@@ -57,20 +60,25 @@ def log_run(
 def get_summary(db: Session) -> Dict[str, Any]:
     base = db.query(RouterRun)
     total_runs = base.count()
-    total_cost = (
-        base.with_entities(func.coalesce(func.sum(RouterRun.cost_usd), 0.0)).scalar()
-        or 0.0
+
+    cost_rows = (
+        base.with_entities(
+            RouterRun.band,
+            RouterRun.prompt_tokens,
+            RouterRun.completion_tokens,
+            RouterRun.cost_usd,
+        ).all()
     )
+    overview_costs = aggregate_overview_costs(cost_rows)
+    total_cost = float(overview_costs["total_actual_cost"] or 0.0)
+
     avg_latency = (
         base.with_entities(func.coalesce(func.avg(RouterRun.latency_ms), 0.0)).scalar()
         or 0.0
     )
-    baseline_cost = (
-        base.with_entities(func.coalesce(func.sum(RouterRun.baseline_cost_usd), 0.0)).scalar()
-        or 0.0
-    )
-    savings = baseline_cost - total_cost
-    savings_pct = (savings / baseline_cost * 100.0) if baseline_cost > 0 else None
+    baseline_cost = float(overview_costs["total_naive_baseline_cost"] or 0.0)
+    savings = overview_costs["savings_abs"] if total_runs else None
+    savings_pct = overview_costs["savings_pct"] if total_runs else None
     cost_per_run = (total_cost / total_runs) if total_runs > 0 else 0.0
 
     provider_rows = (
@@ -124,6 +132,13 @@ def get_summary(db: Session) -> Dict[str, Any]:
     )
     high_risk_pct = (high_risk / total_runs * 100.0) if total_runs else 0.0
 
+    what_if_total = (
+        base.with_entities(
+            func.coalesce(func.sum(RouterRun.counterfactual_cost_usd), 0.0)
+        ).scalar()
+        or 0.0
+    )
+
     return {
         "total_runs": total_runs,
         "avg_latency_ms": avg_latency,
@@ -132,6 +147,8 @@ def get_summary(db: Session) -> Dict[str, Any]:
         "baseline_cost_usd": baseline_cost if total_runs else None,
         "savings_vs_baseline_usd": savings if total_runs else None,
         "savings_pct": savings_pct,
+        "what_if_cost_usd": what_if_total if total_runs else None,
+        "what_if_vs_actual_usd": (what_if_total - total_cost) if total_runs else None,
         "provider_breakdown": provider_breakdown,
         "timeseries": timeseries,
         "avg_alri_score": avg_alri,
@@ -168,6 +185,7 @@ def list_runs(db: Session, *, offset: int, limit: int) -> Dict[str, Any]:
             "routing_efficient": row.routing_efficient,
             "query_category": row.query_category,
             "query_category_conf": row.query_category_conf,
+            "counterfactual_cost_usd": row.counterfactual_cost_usd,
         }
         for row in rows
     ]

@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, case
 from sqlalchemy.orm import Session
 
-from costs import compute_baseline_cost
+from analytics.aggregate_overview import aggregate_overview_costs
+from analytics.aggregate_analytics import aggregate_analytics_costs
 from db.models import RouterRun
 from db.session import get_db
 from shared.metrics import (
@@ -35,13 +36,10 @@ def get_overview_summary(
 
     since = datetime.utcnow() - timedelta(hours=window_hours)
 
-    total_runs, avg_latency, total_cost, prompt_tokens, completion_tokens = (
+    total_runs, avg_latency = (
         db.query(
             func.count(RouterRun.id),
             func.avg(RouterRun.latency_ms),
-            func.sum(RouterRun.cost_usd),
-            func.sum(RouterRun.prompt_tokens),
-            func.sum(RouterRun.completion_tokens),
         )
         .filter(RouterRun.created_at >= since)
         .one()
@@ -49,22 +47,29 @@ def get_overview_summary(
 
     total_runs = total_runs or 0
     avg_latency = float(avg_latency or 0.0)
-    total_cost = float(total_cost or 0.0)
-    prompt_tokens = int(prompt_tokens or 0)
-    completion_tokens = int(completion_tokens or 0)
+
+    cost_rows = (
+        db.query(
+            RouterRun.band,
+            RouterRun.prompt_tokens,
+            RouterRun.completion_tokens,
+            RouterRun.cost_usd,
+        )
+        .filter(RouterRun.created_at >= since)
+        .all()
+    )
+    overview_costs = aggregate_overview_costs(cost_rows)
+    total_cost = float(overview_costs["total_actual_cost"] or 0.0)
 
     cost_per_run = float(total_cost / total_runs) if total_runs > 0 else 0.0
 
-    baseline_total = None
-    savings_abs = None
-    savings_pct = None
-
-    total_tokens = prompt_tokens + completion_tokens
-    if total_tokens > 0:
-        baseline_total = compute_baseline_cost(prompt_tokens, completion_tokens)
-        savings_abs = baseline_total - total_cost
-        if baseline_total > 0:
-            savings_pct = (savings_abs / baseline_total) * 100.0
+    baseline_total = (
+        float(overview_costs["total_naive_baseline_cost"] or 0.0)
+        if total_runs
+        else None
+    )
+    savings_abs = overview_costs["savings_abs"] if total_runs else None
+    savings_pct = overview_costs["savings_pct"] if total_runs else None
 
     return OverviewSummary(
         total_runs=total_runs,
@@ -86,19 +91,22 @@ def get_savings_overview(
     Savings vs baseline within a rolling window.
     """
     since = datetime.utcnow() - timedelta(hours=window_hours)
-    actual_cost, baseline_cost = (
+    runs = (
         db.query(
-            func.coalesce(func.sum(RouterRun.cost_usd), 0.0),
-            func.coalesce(func.sum(RouterRun.baseline_cost_usd), 0.0),
+            RouterRun.band,
+            RouterRun.prompt_tokens,
+            RouterRun.completion_tokens,
+            RouterRun.cost_usd,
         )
         .filter(RouterRun.created_at >= since)
-        .one()
+        .all()
     )
 
-    actual_cost = float(actual_cost or 0.0)
-    baseline_cost = float(baseline_cost or 0.0)
-    savings = baseline_cost - actual_cost
-    savings_pct = (savings / baseline_cost * 100.0) if baseline_cost > 0 else 0.0
+    stats = aggregate_analytics_costs(runs)
+    actual_cost = float(stats["total_actual_cost"] or 0.0)
+    baseline_cost = float(stats["total_band_baseline_cost"] or 0.0)
+    savings = float(stats["savings_band_abs"] or 0.0)
+    savings_pct = float(stats["savings_band_pct"] or 0.0)
     projected_monthly = savings * 30.0
 
     return {
@@ -107,6 +115,7 @@ def get_savings_overview(
         "savings_usd": savings,
         "savings_pct": savings_pct,
         "projected_monthly_savings": projected_monthly,
+        "message": stats.get("message"),
     }
 
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProviderBadge } from "@/components/ProviderBadge";
+import { MetricCard } from "@/components/MetricCard";
 
 type ProviderStat = {
   provider: string;
@@ -86,7 +87,7 @@ export default function OverviewPage() {
     <div className="min-h-screen bg-[#030712] text-slate-50">
       {/* subtle gradient wash */}
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,_rgba(45,212,191,0.22),_transparent_55%),radial-gradient(circle_at_bottom,_rgba(56,189,248,0.16),_transparent_55%),linear-gradient(130deg,_rgba(12,18,40,0.9)_0%,_rgba(2,8,23,0.95)_60%)]" />
-      <main className="relative mx-auto flex max-w-6xl flex-col gap-9 px-4 pb-16 pt-10 sm:px-6 lg:px-8">
+      <main className="relative mx-auto flex w-full max-w-6xl flex-col gap-9 px-4 pb-16 pt-10 sm:px-6 lg:px-10 xl:max-w-[72rem]">
         <h1 className="text-2xl font-semibold text-white">Overview</h1>
         {/* Hero */}
         <section className="space-y-6">
@@ -165,7 +166,7 @@ export default function OverviewPage() {
 
         {/* Main metric surface */}
         {!loading && !error && (
-          <section className="grid gap-5 lg:grid-cols-[1.8fr,1.2fr]">
+          <section className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,1.2fr)] xl:grid-cols-[minmax(0,4fr)_minmax(0,1.2fr)]">
             {/* Primary metric panel */}
             <Card className="border border-slate-800/70 bg-gradient-to-br from-[#0d1529]/90 via-[#070d1c]/95 to-[#020409] shadow-[0_35px_90px_rgba(1,4,14,0.85)] backdrop-blur-xl">
               <CardHeader className="pb-2">
@@ -212,7 +213,7 @@ export default function OverviewPage() {
                     <p className="text-[11px] uppercase tracking-wide text-slate-400">
                       Total cost
                     </p>
-                    <p className="text-3xl font-semibold tabular-nums text-emerald-300">
+                    <p className="text-2xl font-semibold tabular-nums text-emerald-300">
                       ${totalCost.toFixed(6)}
                     </p>
                     <p className="text-[11px] text-slate-500">
@@ -221,124 +222,83 @@ export default function OverviewPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-3">
-                  {/* Cost per run */}
-                  <div className="rounded-xl border border-slate-800/70 bg-gradient-to-r from-slate-900/80 to-slate-950/80 px-4 py-3 shadow-[0_20px_40px_rgba(3,7,18,0.65)]">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                      Cost per run
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-50">
-                      ${costPerRun.toFixed(6)}
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      This becomes powerful once OpenAI / Anthropic adapters
-                      return real usage costs.
-                    </p>
-                  </div>
-
-                  {/* Tiny “trend” stub */}
-                  <div className="rounded-xl border border-slate-800/70 bg-gradient-to-r from-[#071129]/85 to-[#040917]/90 px-4 py-3 shadow-[0_15px_35px_rgba(2,6,23,0.65)]">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                      Router signal
-                    </p>
-                    <p className="mt-1 text-[13px] text-slate-200">
-                      Live latency, provider cost, and category tags for each
-                      request. Use Analytics for breakdowns, or drill into Logs
-                      to see how the router handled individual prompts.
-                    </p>
+                <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
+                  <MetricCard
+                    label="Cost per run"
+                    value={`$${costPerRun.toFixed(6)}`}
+                    sublabel="This becomes powerful once OpenAI / Anthropic adapters return real usage costs."
+                    valueClassName="text-base font-semibold text-slate-50 sm:text-lg"
+                  />
+                  <MetricCard
+                    label="Router signal"
+                    value="Live stream"
+                    sublabel="Latency, provider cost, and category tags for each request."
+                    valueClassName="text-base font-semibold text-cyan-200 sm:text-lg"
+                  >
                     <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-900">
                       <div className="h-full w-2/3 bg-gradient-to-r from-emerald-400 via-cyan-400 to-sky-400" />
                     </div>
-                  </div>
-
-                  {/* Savings */}
-                  <div className="rounded-xl border border-slate-800/70 bg-gradient-to-r from-[#041020]/85 to-[#02070f]/90 px-4 py-3 shadow-[0_15px_30px_rgba(1,6,20,0.6)]">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                      Savings vs baseline (all gpt-4o)
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-300">
-                      {savingsDisplay}
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      Compared to routing 100% of traffic through gpt-4o.
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-800/70 bg-gradient-to-r from-[#050f1f]/85 to-[#01050c]/90 px-4 py-3 shadow-[0_12px_28px_rgba(1,5,18,0.55)]">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                      What-if GPT-4.1 (est)
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-50">
-                      {whatIfCost != null ? `$${whatIfCost.toFixed(6)}` : "—"}
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      vs actual:{" "}
-                      {whatIfDelta != null
-                        ? `${whatIfDelta >= 0 ? "+" : "-"}$${Math.abs(
-                            whatIfDelta,
-                          ).toFixed(6)}`
-                        : "—"}
-                    </p>
-                  </div>
+                  </MetricCard>
+                  <MetricCard
+                    label="Savings vs baseline (all gpt-4o)"
+                    value={savingsDisplay}
+                    sublabel="Compared to routing 100% of traffic through gpt-4o."
+                    valueClassName="text-base font-semibold text-emerald-300 sm:text-lg"
+                  />
+                  <MetricCard
+                    label="What-if GPT-4.1 (est)"
+                    value={whatIfCost != null ? `$${whatIfCost.toFixed(6)}` : "—"}
+                    sublabel="vs actual"
+                    valueClassName="text-base font-semibold text-slate-50 sm:text-lg"
+                  />
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-xl border border-slate-800/70 bg-gradient-to-r from-[#030b1b]/85 to-[#01050b]/90 px-4 py-3 shadow-[0_15px_35px_rgba(1,6,18,0.55)]">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                      Avg ALRI (0–10)
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-50">
-                      {avgAlriScore != null ? avgAlriScore.toFixed(1) : "—"}
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      ALRI (0–10) summarizes cost, complexity, business impact,
-                      safety, and governance pressure for your AI traffic.
-                      Higher = heavier, more sensitive workload.
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-800/70 bg-gradient-to-r from-[#050d21]/85 to-[#020610]/90 px-4 py-3 shadow-[0_15px_35px_rgba(1,5,16,0.55)]">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                      High ALRI runs
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums text-amber-300">
-                      {highAlriDisplay}
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      Share of requests that fall into long-retention /
-                      audit-grade tiers (orange or red).
-                    </p>
-                  </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <MetricCard
+                    label="Avg ALRI (0–10)"
+                    value={avgAlriScore != null ? avgAlriScore.toFixed(1) : "—"}
+                    sublabel="ALRI summarizes cost, complexity, and safety pressure for your AI traffic."
+                    valueClassName="text-2xl font-semibold text-slate-50"
+                  />
+                  <MetricCard
+                    label="High ALRI runs"
+                    value={highAlriDisplay}
+                    sublabel="Share of requests that fall into long-retention / audit-grade tiers (orange or red)."
+                    valueClassName="text-2xl font-semibold text-amber-300"
+                  />
                 </div>
               </CardContent>
             </Card>
 
-            <details className="self-start rounded-2xl border border-slate-800/60 bg-gradient-to-br from-[#0b0f1d]/90 via-[#090d17]/85 to-[#04060c] p-4 text-xs text-slate-200/90 transition-all duration-300">
-              <summary className="cursor-pointer text-sm font-medium text-slate-100">
-                How to use this view
-              </summary>
-              <div className="mt-3 space-y-3 leading-relaxed">
+            <Card className="border border-slate-800/60 bg-gradient-to-br from-[#0b0f1d]/90 via-[#090d17]/85 to-[#04060c] shadow-[0_25px_70px_rgba(1,4,12,0.85)] backdrop-blur-lg">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-medium text-slate-100">
+                  How to use this view
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-xs leading-relaxed text-slate-200/90">
                 <p>
                   <span className="font-semibold text-slate-50">Total runs</span>{" "}
-                  shows how much traffic actually flows through your smart
+                  tells you how much traffic actually flows through your smart
                   router instead of hitting a single model directly.
                 </p>
                 <p>
                   <span className="font-semibold text-slate-50">Avg latency</span>{" "}
-                  reflects how fast the system feels to agents, orchestrators, or
+                  is how fast the system feels to your agents, orchestrators, or
                   end-users.
                 </p>
                 <p>
                   <span className="font-semibold text-slate-50">Total cost</span>{" "}
-                  anchors savings stories once multi-provider adapters are fully
-                  enabled.
+                  will become the anchor for showing savings once multi-provider
+                  adapters are fully enabled.
                 </p>
                 <p className="pt-2 text-[11px] text-slate-500">
-                  Designed for early decks: clean, premium metrics while the
-                  backend model matures.
+                  This is intentionally lean but polished — a premium-looking
+                  alpha view you can screenshot for early decks, while the
+                  backend metrics model matures.
                 </p>
-              </div>
-            </details>
+              </CardContent>
+            </Card>
           </section>
         )}
 
@@ -352,7 +312,7 @@ export default function OverviewPage() {
         )}
 
         {summary && (
-      <section className="mt-6 space-y-3">
+          <section className="mt-6 space-y-3">
             <h2 className="text-sm font-semibold tracking-wide text-slate-200">
               Provider breakdown
             </h2>

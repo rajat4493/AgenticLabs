@@ -16,6 +16,8 @@ from router import compute_alri_tag, evaluate_policy, new_run_id
 from router.complexity import choose_band, score_complexity
 from router.rule_based import PROVIDER_DEFAULT_MODELS, SelectedModel, select_model
 from router.routing_rules import load_routing_rules
+from router.model_registry import NAIVE_BASELINE_MODEL_KEY
+from router.routing_bands import RoutingBand
 from logger import log_event
 from providers import PROVIDERS
 from costs import compute_costs
@@ -25,8 +27,13 @@ from db.models import Base
 from db.router_runs_repo import get_summary, list_runs as list_runs_repo, log_run
 from db.session import engine, get_db
 from config.router import RouterMode
-from deps import get_router_mode_dep
+from config.model_registry import MODEL_REGISTRY
+from cost.calculator import calculate_cost, resolve_model_key
+from deps import get_router_mode_dep, get_tenant_dep
+from models.tenant import Tenant
 from routing.categories import classify_query, QueryCategory
+from routing.scoring import choose_enhanced_model
+from pricing import estimate_cost_for_model
 
 app = FastAPI(title="AgenticLabs API", version="0.1.2")
 Base.metadata.create_all(bind=engine)
@@ -63,6 +70,7 @@ def run_endpoint(
     payload: RunRequest,
     db: Session = Depends(get_db),
     router_mode: RouterMode = Depends(get_router_mode_dep),
+    tenant: Tenant = Depends(get_tenant_dep),
 ):
     if payload.router_mode:
         try:
@@ -78,16 +86,20 @@ def run_endpoint(
 
     # ---- Smart routing (with manual override) ----
     cscore = score_complexity(payload.prompt)
-    inferred_band = choose_band(cscore, payload.prompt)
+    inferred_band_raw = choose_band(cscore, payload.prompt)
+    inferred_band = RoutingBand.normalize(inferred_band_raw).value
 
     overrides = payload.policy_overrides or {}
     force_model = payload.force_model or overrides.get("force_model")
     force_provider = payload.force_provider or overrides.get("force_provider")
     force_band = payload.force_band or overrides.get("force_band")
 
-    requested_band = payload.band or inferred_band
+    def canonical_band(value: str | None) -> str:
+        return RoutingBand.normalize(value).value
+
+    requested_band = canonical_band(payload.band or inferred_band)
     if isinstance(force_band, str) and force_band:
-        requested_band = force_band
+        requested_band = canonical_band(force_band)
 
     task_type = payload.task_type
 
@@ -107,6 +119,32 @@ def run_endpoint(
     provider_name = selected.provider
     model_name = selected.model
     resolved_band = selected.band
+    selection_source = selected.route_source
+
+    allowed_keys = tenant.allowed_models or list(MODEL_REGISTRY.keys())
+
+    if router_mode == RouterMode.ENHANCED:
+        choice = choose_enhanced_model(
+            category=category,
+            allowed_model_keys=allowed_keys,
+            resolved_band=resolved_band,
+        )
+        if choice:
+            provider_name = choice.provider
+            model_name = choice.model_id
+            selection_source = "enhanced"
+
+    final_key = f"{provider_name}:{model_name}"
+    if allowed_keys and final_key not in allowed_keys:
+        fallback_choice = choose_enhanced_model(
+            category=category,
+            allowed_model_keys=allowed_keys,
+            resolved_band=resolved_band,
+        )
+        if fallback_choice:
+            provider_name = fallback_choice.provider
+            model_name = fallback_choice.model_id
+            selection_source = "enhanced"
 
     if provider_name not in PROVIDERS:
         provider_name = "openai"
@@ -126,7 +164,7 @@ def run_endpoint(
         "force_model": bool(force_model),
         "force_band": bool(force_band),
         "force_provider": bool(force_provider),
-        "route_source": selected.route_source,
+        "route_source": selection_source,
         "category": category.value,
         "category_confidence": category_conf,
     })
@@ -150,15 +188,41 @@ def run_endpoint(
     prompt_tokens = int(prompt_tokens or 0)
     completion_tokens = int(completion_tokens or 0)
 
-    computed_cost, baseline_cost = compute_costs(
+    model_key = resolve_model_key(provider_name, model_name) or f"{provider_name}:{model_name}"
+    cost_usd = calculate_cost(
+        model_key=model_key,
         provider=provider_name,
         model=model_name,
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
+        input_tokens=prompt_tokens,
+        output_tokens=completion_tokens,
     )
-    cost_usd = computed_cost if computed_cost > 0 else float(result.get("cost_usd", 0.0))
+    if cost_usd <= 0:
+        legacy_cost, _ = compute_costs(
+            provider=provider_name,
+            model=model_name,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
+        if legacy_cost and legacy_cost > 0:
+            cost_usd = legacy_cost
+        else:
+            cost_usd = float(result.get("cost_usd", 0.0) or 0.0)
+
+    baseline_cost = calculate_cost(
+        model_key=NAIVE_BASELINE_MODEL_KEY,
+        input_tokens=prompt_tokens,
+        output_tokens=completion_tokens,
+    )
     if baseline_cost <= 0:
-        baseline_cost = cost_usd if cost_usd > 0 else float(result.get("cost_usd", 0.0))
+        _, legacy_baseline = compute_costs(
+            provider=provider_name,
+            model=model_name,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
+        baseline_cost = legacy_baseline or cost_usd
+    cost_usd = float(cost_usd or 0.0)
+    baseline_cost = float(baseline_cost or cost_usd)
 
     result["cost_usd"] = cost_usd
 
@@ -204,18 +268,37 @@ def run_endpoint(
     )
 
     # Routing efficiency: compare against default selection cost
-    default_cost, _ = compute_costs(
+    default_model_key = resolve_model_key(
+        default_selection.provider, default_selection.model
+    ) or f"{default_selection.provider}:{default_selection.model}"
+    default_cost = calculate_cost(
+        model_key=default_model_key,
         provider=default_selection.provider,
         model=default_selection.model,
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
+        input_tokens=prompt_tokens,
+        output_tokens=completion_tokens,
     )
+    if default_cost <= 0:
+        legacy_default_cost, _ = compute_costs(
+            provider=default_selection.provider,
+            model=default_selection.model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
+        default_cost = legacy_default_cost
+    default_cost = float(default_cost or 0.0)
     epsilon = 0.02
     routing_efficient = False
     if default_cost > 0:
         routing_efficient = cost_usd <= (default_cost * (1 + epsilon))
     else:
         routing_efficient = True
+
+    what_if_cost_usd = estimate_cost_for_model(
+        "gpt-4.1",
+        prompt_tokens,
+        category,
+    )
 
     log_run(
         db,
@@ -237,6 +320,7 @@ def run_endpoint(
         routing_efficient=routing_efficient,
         query_category=category.value,
         query_category_conf=category_conf,
+        counterfactual_cost_usd=what_if_cost_usd,
     )
 
     # ---- Response ----
@@ -245,7 +329,7 @@ def run_endpoint(
         {
             "provider": provider_name,
             "model": model_name,
-            "route_source": selected.route_source,
+            "route_source": selection_source,
         }
     )
     result["provenance"] = provenance

@@ -24,20 +24,50 @@ def score_complexity(prompt: str) -> float:
     f_sent = min(len(re.split(r"[.!?]+", prompt)) / 20.0, 1.0)
 
     # keywords hinting complexity
-    KW = ["analyze", "optimize", "summarize", "compare", "design", "explain", "policy", "architecture"]
-    f_kw = 0.15 if any(k in prompt.lower() for k in KW) else 0.0
+    KW = [
+        "analyze",
+        "optimize",
+        "summarize",
+        "compare",
+        "design",
+        "explain",
+        "policy",
+        "architecture",
+        "draft",
+        "contract",
+        "clause",
+        "compliance",
+        "legal",
+    ]
+    keywords = [k for k in KW if k in prompt.lower()]
+    f_kw = min(0.1 * len(keywords), 0.3)
 
-    score = (0.45 * f_len) + (0.15 * f_digits) + (0.1 * f_symbols) + f_code + f_json + (0.2 * f_sent) + f_kw
+    score = (
+        (0.45 * f_len)
+        + (0.15 * f_digits)
+        + (0.1 * f_symbols)
+        + f_code
+        + f_json
+        + (0.2 * f_sent)
+        + f_kw
+    )
     return max(0.0, min(score, 1.0))
 
 LONG_CONTEXT_CHAR_THRESHOLD = 4000
 
 
 def choose_band(score: float, prompt: str | None = None) -> str:
-    if prompt and len(prompt) >= LONG_CONTEXT_CHAR_THRESHOLD:
+    text = prompt or ""
+    text_len = len(text)
+
+    if text_len >= LONG_CONTEXT_CHAR_THRESHOLD:
         return "long_context"
-    if score < 0.25:
+    if text_len <= 160 and score <= 0.15:
         return "simple"
-    if score < 0.6:
+    if text_len >= 2000 or score >= 0.85:
+        return "complex"
+    if score < 0.35:
+        return "simple"
+    if score < 0.7:
         return "moderate"
     return "complex"

@@ -83,9 +83,11 @@ interface RouterResult {
   debug?: any;
 }
 
+type BandChoice = "auto" | "low" | "medium" | "high";
+
 export default function PlaygroundPage() {
   const [prompt, setPrompt] = useState("");
-  const [band, setBand] = useState<"low" | "medium" | "high">("medium");
+  const [band, setBand] = useState<BandChoice>("auto");
   const [selectedProvider, setSelectedProvider] = useState<ProviderKey>("auto");
   const [routerMode, setRouterMode] = useState<"baseline" | "enhanced">(
     "baseline",
@@ -109,17 +111,21 @@ export default function PlaygroundPage() {
     setLoading(true);
     setError(null);
 
-    try {
-      const res = await fetch("/api/router-proxy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      try {
+        const payload: Record<string, any> = {
           prompt,
-          band,
           router_mode: routerMode,
           force_provider: selectedProvider === "auto" ? null : selectedProvider,
-        }),
-      });
+        };
+        if (band !== "auto") {
+          payload.band = band;
+        }
+
+        const res = await fetch("/api/router-proxy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
 
       if (!res.ok) {
         const text = await res.text();
@@ -214,20 +220,20 @@ export default function PlaygroundPage() {
             <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
               Band
             </h2>
-            <div className="flex gap-2">
-              {["low", "medium", "high"].map((b) => (
+            <div className="flex flex-wrap gap-2">
+              {(["auto", "low", "medium", "high"] as BandChoice[]).map((b) => (
                 <button
                   key={b}
                   type="button"
-                  onClick={() => setBand(b as "low" | "medium" | "high")}
+                  onClick={() => setBand(b)}
                   className={cn(
-                    "flex-1 rounded-md border px-2 py-1 text-xs capitalize transition",
+                    "flex-1 rounded-md border px-2 py-1 text-xs capitalize transition min-w-[70px]",
                     band === b
                       ? cn("bg-slate-900", theme.accentClass)
                       : "border-slate-700 bg-slate-950/60 hover:bg-slate-900/60",
                   )}
                 >
-                  {b}
+                  {b === "auto" ? "Auto" : b}
                 </button>
               ))}
             </div>
